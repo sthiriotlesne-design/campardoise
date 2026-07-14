@@ -5,16 +5,540 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Camp'Ardoise - Gestionnaire de Bar</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }
+    </style>
 </head>
 <body>
     <div id="root"></div>
-    <script>
-        // ============================================================
-        // CAMP'ARDOISE — VERSION COMPLÈTE (tout en un fichier)
-        // ============================================================
-        
-        // Voici tout votre code React adapté pour fonctionner en HTML
-        // Je vous donne la version complète ci-dessous...
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
     </script>
 </body>
 </html>
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+        
+        // ── Helpers ──
+        const toCents = (euros) => Math.round(euros * 100);
+        const fromCents = (cents) => cents / 100;
+        const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+        const money = (cents) => fmt.format(fromCents(cents));
+        const uid = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        const normalizeSearch = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const fuzzyMatch = (haystack, needle) => {
+            const n = normalizeSearch(needle).trim();
+            if (!n) return true;
+            return normalizeSearch(haystack).includes(n);
+        };
+        const timeAgo = (iso) => {
+            const diffMs = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(diffMs / 60000);
+            if (mins < 1) return "à l'instant";
+            if (mins < 60) return `il y a ${mins} min`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `il y a ${hrs} h`;
+            return new Date(iso).toLocaleDateString("fr-FR");
+        };
+        const isSameDay = (iso, date) => {
+            const d = new Date(iso);
+            return d.getFullYear() === date.getFullYear() && d.getMonth() === date.getMonth() && d.getDate() === date.getDate();
+        };
+        
+        // ── Icônes ──
+        const Plus = () => <span className="text-white font-bold text-xl">+</span>;
+        const Search = () => <span className="text-slate-500">🔍</span>;
+        const Phone = () => <span className="text-slate-500">📱</span>;
+        const Clock = () => <span className="text-slate-500">🕐</span>;
+        const X = () => <span className="text-slate-400">✕</span>;
+        const Minus = () => <span className="text-white">−</span>;
+        const CreditCard = () => <span className="text-white">💳</span>;
+        const Banknote = () => <span className="text-white">💰</span>;
+        const FileCheck2 = () => <span className="text-white">✅</span>;
+        const MoreHorizontal = () => <span className="text-slate-400">⋯</span>;
+        const CheckCircle2 = () => <span className="text-white">✓</span>;
+        const ArrowLeft = () => <span className="text-slate-300">←</span>;
+        const Trash2 = () => <span className="text-rose-400">🗑</span>;
+        const Pencil = () => <span className="text-slate-300">✎</span>;
+        const ChevronRight = () => <span className="text-slate-600">→</span>;
+        const CalendarIcon = () => <span className="text-slate-500">📅</span>;
+        const Settings = () => <span className="text-slate-500">⚙</span>;
+        const ListChecks = () => <span className="text-slate-500">📋</span>;
+        const Users = () => <span className="text-slate-500">👥</span>;
+        const History = () => <span className="text-slate-500">📖</span>;
+        const Coffee = () => <span className="text-slate-400">☕</span>;
+        const Beer = () => <span className="text-slate-400">🍺</span>;
+        const Wine = () => <span className="text-slate-400">🍷</span>;
+        const GlassWater = () => <span className="text-slate-400">🥤</span>;
+        const IceCream = () => <span className="text-slate-400">🍦</span>;
+        const Martini = () => <span className="text-slate-400">🍸</span>;
+        const Sparkles = () => <span className="text-slate-400">✨</span>;
+        const CupSoda = () => <span className="text-slate-400">🥤</span>;
+        const Baby = () => <span className="text-slate-400">👶</span>;
+        const Utensils = () => <span className="text-slate-400">🍽</span>;
+        const AlertTriangle = () => <span className="text-amber-400">⚠</span>;
+        
+        const CATEGORY_ICONS = {
+            cat_aperitif_partage: Utensils,
+            cat_plats: Utensils,
+            cat_menu_enfants: Baby,
+            cat_desserts: IceCream,
+            cat_cocktails: Martini,
+            cat_bieres: Beer,
+            cat_long_drinks: GlassWater,
+            cat_vins: Wine,
+            cat_aperitifs_spiritueux: Sparkles,
+            cat_softs_eaux: CupSoda,
+        };
+        const iconFor = (categoryId) => CATEGORY_ICONS[categoryId] || Coffee;
+        const MODIFIABLE_CATEGORIES = new Set(["cat_bieres", "cat_softs_eaux"]);
+        
+        const SEED = {
+            categories: [
+                { id: "cat_aperitif_partage", name: "A Partager en Apéritif", displayOrder: 1 },
+                { id: "cat_plats", name: "Plats", displayOrder: 2 },
+                { id: "cat_menu_enfants", name: "Menu Enfants -13 Ans", displayOrder: 3 },
+                { id: "cat_desserts", name: "Desserts", displayOrder: 4 },
+                { id: "cat_cocktails", name: "Cocktails", displayOrder: 5 },
+                { id: "cat_bieres", name: "Bières", displayOrder: 6 },
+                { id: "cat_long_drinks", name: "Long Drinks", displayOrder: 7 },
+                { id: "cat_vins", name: "Vins", displayOrder: 8 },
+                { id: "cat_aperitifs_spiritueux", name: "Apéritifs & Spiritueux", displayOrder: 9 },
+                { id: "cat_softs_eaux", name: "Boissons Soft & Eaux", displayOrder: 10 },
+            ],
+            options: [
+                { id: "opt_sirop", name: "Sirop", additionalPrice: 0.5 },
+                { id: "opt_picon", name: "Picon", additionalPrice: 1.0 },
+            ],
+            products: [
+                { id: "p1", categoryId: "cat_aperitif_partage", name: "Saucisson, Chips & Pain", price: 12.0 },
+                { id: "p2", categoryId: "cat_plats", name: "Tartes de légumes & Salade", price: 17.0 },
+                { id: "p3", categoryId: "cat_plats", name: "Poulet Croustillant et pomme de terre grenaille ou tatin de légumes", price: 18.0 },
+                { id: "p4", categoryId: "cat_plats", name: "Croque Monsieur & Salade", price: 16.0 },
+                { id: "p5", categoryId: "cat_plats", name: "Boite chaude : Lasagne de légumes au curry & Salade", price: 17.0 },
+                { id: "p6", categoryId: "cat_plats", name: "Boite chaude : Tartiflette & Salade", price: 17.0 },
+                { id: "p7", categoryId: "cat_plats", name: "Boite chaude : Delice de canard", price: 17.0 },
+                { id: "p8", categoryId: "cat_menu_enfants", name: "Menu Enfant (Pâtes fromage ou carbonara + canette + Mars)", price: 15.0 },
+                { id: "p9", categoryId: "cat_desserts", name: "Crumble", price: 6.0 },
+                { id: "p10", categoryId: "cat_desserts", name: "Part de tarte Dain / Citron / Tatin", price: 6.0 },
+                { id: "p11", categoryId: "cat_cocktails", name: "Spritz", price: 8.0 },
+                { id: "p12", categoryId: "cat_cocktails", name: "Bloody Mary", price: 8.0 },
+                { id: "p13", categoryId: "cat_cocktails", name: "Tequila Sunrise", price: 8.0 },
+                { id: "p14", categoryId: "cat_cocktails", name: "Rhum arrangé", price: 6.0 },
+                { id: "p15", categoryId: "cat_cocktails", name: "Rhum Trois-Rivières", price: 7.0 },
+                { id: "p16", categoryId: "cat_cocktails", name: "Whisky Japonais", price: 7.0 },
+                { id: "p17", categoryId: "cat_cocktails", name: "Don Papa", price: 7.0 },
+                { id: "p18", categoryId: "cat_cocktails", name: "Mojito (selon arrivage)", price: 8.0 },
+                { id: "p19", categoryId: "cat_cocktails", name: "Virgin Mojito", price: 7.0 },
+                { id: "p20", categoryId: "cat_bieres", name: "Heineken (Demi 25cl)", price: 3.0 },
+                { id: "p21", categoryId: "cat_bieres", name: "Heineken (Pinte 50cl)", price: 6.0 },
+                { id: "p22", categoryId: "cat_bieres", name: "Affligem (Demi 25cl)", price: 4.0 },
+                { id: "p23", categoryId: "cat_bieres", name: "Affligem (Pinte 50cl)", price: 8.0 },
+                { id: "p24", categoryId: "cat_bieres", name: "Monaco (Heineken)", price: 4.0 },
+                { id: "p25", categoryId: "cat_bieres", name: "Desperados", price: 4.5 },
+                { id: "p26", categoryId: "cat_bieres", name: "Bière Zéro (sans alcool)", price: 4.5 },
+                { id: "p27", categoryId: "cat_bieres", name: "Levrette", price: 6.0 },
+                { id: "p28", categoryId: "cat_bieres", name: "Kékette", price: 6.0 },
+                { id: "p29", categoryId: "cat_bieres", name: "Rince Cochon", price: 6.0 },
+                { id: "p30", categoryId: "cat_long_drinks", name: "Whisky JB Coca", price: 5.0 },
+                { id: "p31", categoryId: "cat_long_drinks", name: "Rhum Orange ou Coca", price: 7.0 },
+                { id: "p32", categoryId: "cat_long_drinks", name: "Vodka Orange ou Coca", price: 7.0 },
+                { id: "p33", categoryId: "cat_vins", name: "Verre de vin (Rouge, Rosé, Blanc)", price: 3.0 },
+                { id: "p34", categoryId: "cat_vins", name: "Bouteille (Rouge, Rosé, Blanc)", price: 17.0 },
+                { id: "p35", categoryId: "cat_vins", name: "Pichet 25 cl", price: 6.0 },
+                { id: "p36", categoryId: "cat_vins", name: "Pichet 50 cl", price: 8.0 },
+                { id: "p37", categoryId: "cat_aperitifs_spiritueux", name: "Ricard 45", price: 4.0 },
+                { id: "p38", categoryId: "cat_aperitifs_spiritueux", name: "Gin", price: 5.0 },
+                { id: "p39", categoryId: "cat_aperitifs_spiritueux", name: "Martini", price: 4.0 },
+                { id: "p40", categoryId: "cat_aperitifs_spiritueux", name: "Pastis", price: 4.0 },
+                { id: "p41", categoryId: "cat_aperitifs_spiritueux", name: "Muscat", price: 4.0 },
+                { id: "p42", categoryId: "cat_aperitifs_spiritueux", name: "Bailey's ou Crème de Rhum", price: 5.0 },
+                { id: "p43", categoryId: "cat_aperitifs_spiritueux", name: "Get 27 ou 31", price: 5.0 },
+                { id: "p44", categoryId: "cat_aperitifs_spiritueux", name: "Jägermeister", price: 5.0 },
+                { id: "p45", categoryId: "cat_aperitifs_spiritueux", name: "Bouteille de Champagne", price: 45.0 },
+                { id: "p46", categoryId: "cat_aperitifs_spiritueux", name: "Crémant", price: 30.0 },
+                { id: "p47", categoryId: "cat_softs_eaux", name: "Canette soft", price: 3.0 },
+                { id: "p48", categoryId: "cat_softs_eaux", name: "Red Bull", price: 4.0 },
+                { id: "p49", categoryId: "cat_softs_eaux", name: "Cristaline Pétillante 1.5L", price: 5.0 },
+                { id: "p50", categoryId: "cat_softs_eaux", name: "Petite Cristaline Pétillante", price: 1.0 },
+                { id: "p51", categoryId: "cat_softs_eaux", name: "Evian 1,5L (avec repas) fraîche", price: 3.0 },
+                { id: "p52", categoryId: "cat_softs_eaux", name: "Evian 1,5L (hors repas) fraîche", price: 5.0 },
+            ].map((p) => ({ ...p, imageUrl: null, priceCents: toCents(p.price) })),
+            clientNotes: [],
+        };
+        
+        const STORAGE_PREFIX = "campardoise::bar::";
+        const SESSION_KEY = "campardoise::session";
+        
+        function loadBarState(barPassword) {
+            const raw = localStorage.getItem(STORAGE_PREFIX + barPassword);
+            if (!raw) return null;
+            try { return JSON.parse(raw); } catch { return null; }
+        }
+        function saveBarState(barPassword, state) {
+            localStorage.setItem(STORAGE_PREFIX + barPassword, JSON.stringify(state));
+        }
+        function barExists(barPassword) {
+            return localStorage.getItem(STORAGE_PREFIX + barPassword) !== null;
+        }
+        
+        function useBarState(barPassword) {
+            const [state, setState] = useState(() => (barPassword ? loadBarState(barPassword) : null));
+            const stateRef = useRef(state);
+            stateRef.current = state;
+            
+            useEffect(() => {
+                if (!barPassword) return;
+                const fresh = loadBarState(barPassword);
+                setState(fresh);
+            }, [barPassword]);
+            
+            useEffect(() => {
+                if (!barPassword) return;
+                const key = STORAGE_PREFIX + barPassword;
+                const onStorage = (e) => {
+                    if (e.key === key && e.newValue) {
+                        try { setState(JSON.parse(e.newValue)); } catch {}
+                    }
+                };
+                window.addEventListener("storage", onStorage);
+                const interval = setInterval(() => {
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return;
+                    if (raw !== JSON.stringify(stateRef.current)) {
+                        try { setState(JSON.parse(raw)); } catch {}
+                    }
+                }, 700);
+                return () => {
+                    window.removeEventListener("storage", onStorage);
+                    clearInterval(interval);
+                };
+            }, [barPassword]);
+            
+            const update = useCallback((updater) => {
+                setState((prev) => {
+                    const next = typeof updater === "function" ? updater(prev) : updater;
+                    if (barPassword) saveBarState(barPassword, next);
+                    return next;
+                });
+            }, [barPassword]);
+            
+            return [state, update];
+        }
+        
+        // ── Composants ──
+        function Modal({ children, onClose, maxW = "max-w-md" }) {
+            return (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+                    <div className={`w-full ${maxW} bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+                        {children}
+                    </div>
+                </div>
+            );
+        }
+        
+        function TopBar({ title, onBack, right }) {
+            return (
+                <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center gap-3">
+                    {onBack && (
+                        <button onClick={onBack} className="w-11 h-11 rounded-2xl bg-slate-900 flex items-center justify-center active:scale-95 transition shrink-0">
+                            <ArrowLeft />
+                        </button>
+                    )}
+                    <h1 className="text-lg font-bold text-white truncate flex-1">{title}</h1>
+                    {right}
+                </div>
+            );
+        }
+        
+        // ── Écran d'authentification ──
+        function AuthScreen({ onEnter }) {
+            const [password, setPassword] = useState("");
+            const [error, setError] = useState("");
+            
+            const handleCreate = () => {
+                const pwd = password.trim();
+                if (!pwd) return setError("Merci de saisir un mot de passe pour créer l'espace.");
+                if (barExists(pwd)) {
+                    setError("Un espace existe déjà avec ce mot de passe.");
+                    return;
+                }
+                saveBarState(pwd, SEED);
+                onEnter(pwd);
+            };
+            
+            const handleJoin = () => {
+                const pwd = password.trim();
+                if (!pwd) return setError("Merci de saisir le mot de passe.");
+                if (!barExists(pwd)) {
+                    setError("Aucun espace ne correspond à ce mot de passe.");
+                    return;
+                }
+                onEnter(pwd);
+            };
+            
+            return (
+                <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+                    <div className="w-full max-w-sm">
+                        <div className="text-center mb-10">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-indigo-600 mb-4 shadow-lg shadow-indigo-950/50">
+                                <Wine />
+                            </div>
+                            <h1 className="text-3xl font-extrabold text-white tracking-tight">Camp'Ardoise</h1>
+                            <p className="text-slate-400 mt-1 text-sm">Le carnet de notes du bar, sans papier.</p>
+                        </div>
+                        <div className="bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-800">
+                            <label className="block text-sm font-semibold text-slate-300 mb-2">Mot de passe de session</label>
+                            <input
+                                type="text"
+                                value={password}
+                                onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                                placeholder="Ex: chesnaie2026"
+                                className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white text-lg placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                autoFocus
+                            />
+                            {error && (
+                                <div className="mt-3 flex items-start gap-2 text-amber-400 text-sm bg-amber-950/40 border border-amber-900 rounded-xl p-3">
+                                    <AlertTriangle />
+                                    <span>{error}</span>
+                                </div>
+                            )}
+                            <div className="mt-6 space-y-3">
+                                <button onClick={handleCreate} className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] transition text-white font-bold text-base shadow-lg shadow-indigo-950/40">
+                                    Créer un espace Bar
+                                </button>
+                                <button onClick={handleJoin} className="w-full h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] transition text-white font-bold text-base border border-slate-700">
+                                    Rejoindre un Bar existant
+                                </button>
+                            </div>
+                        </div>
+                        <p className="text-center text-slate-600 text-xs mt-6">
+                            Tous les appareils utilisant le même mot de passe partagent en direct les mêmes données.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ── Liste des ardoises ──
+        function ClientNotesTab({ bar, updateBar, onOpenClient }) {
+            const [search, setSearch] = useState("");
+            const [showNewModal, setShowNewModal] = useState(false);
+            const [duplicateWarning, setDuplicateWarning] = useState(null);
+            
+            const activeNotes = (bar.clientNotes || []).filter((n) => n.status === "active");
+            
+            const filtered = useMemo(() => {
+                const q = search.trim().toLowerCase();
+                if (!q) return activeNotes;
+                return activeNotes.filter((n) => n.name.toLowerCase().includes(q) || (n.phone || "").toLowerCase().includes(q));
+            }, [activeNotes, search]);
+            
+            const sorted = [...filtered].sort((a, b) => {
+                const aLast = a.orders.length ? a.orders[a.orders.length - 1].timestamp : a.createdAt;
+                const bLast = b.orders.length ? b.orders[b.orders.length - 1].timestamp : b.createdAt;
+                return new Date(bLast) - new Date(aLast);
+            });
+            
+            const createNote = (name, phone, force) => {
+                const trimmed = name.trim();
+                if (!trimmed) return;
+                const existing = activeNotes.find((n) => n.name.trim().toLowerCase() === trimmed.toLowerCase());
+                if (existing && !force) {
+                    setDuplicateWarning({ name: trimmed, existing, phone });
+                    return;
+                }
+                const newNote = {
+                    id: uid("note"),
+                    name: trimmed,
+                    phone: phone.trim() || null,
+                    status: "active",
+                    createdAt: new Date().toISOString(),
+                    closedAt: null,
+                    paymentMethod: null,
+                    orders: [],
+                    totalAmountCents: 0,
+                };
+                updateBar((prev) => ({ ...prev, clientNotes: [...(prev.clientNotes || []), newNote] }));
+                setShowNewModal(false);
+                setDuplicateWarning(null);
+            };
+            
+            return (
+                <div className="pb-28">
+                    <TopBar
+                        title="Ardoises actives"
+                        right={<span className="text-xs font-semibold text-indigo-300 bg-indigo-950/60 px-3 py-1.5 rounded-full">{activeNotes.length} ouverte{activeNotes.length !== 1 ? "s" : ""}</span>}
+                    />
+                    <div className="px-4 pt-4">
+                        <div className="relative">
+                            <Search />
+                            <input
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Rechercher un client..."
+                                className="w-full h-14 pl-12 pr-4 rounded-2xl bg-slate-900 text-white placeholder-slate-500 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                            />
+                        </div>
+                    </div>
+                    {sorted.length === 0 ? (
+                        <div className="px-4 mt-16 text-center">
+                            <Users />
+                            <p className="text-slate-500 font-medium">{search ? "Aucun client ne correspond à cette recherche." : "Aucune ardoise ouverte pour l'instant."}</p>
+                            {!search && <p className="text-slate-600 text-sm mt-1">Touchez le bouton + pour ouvrir la première note.</p>}
+                        </div>
+                    ) : (
+                        <div className="px-4 mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {sorted.map((note) => {
+                                const lastTs = note.orders.length ? note.orders[note.orders.length - 1].timestamp : note.createdAt;
+                                return (
+                                    <button key={note.id} onClick={() => onOpenClient(note.id)} className="text-left bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-3xl p-5 transition active:scale-[0.98] shadow-sm">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <h3 className="font-bold text-white text-lg leading-tight">{note.name}</h3>
+                                            <ChevronRight />
+                                        </div>
+                                        {note.phone && (
+                                            <div className="flex items-center gap-1.5 text-slate-500 text-sm mt-1">
+                                                <Phone /> {note.phone}
+                                            </div>
+                                        )}
+                                        <div className={`mt-4 text-3xl font-extrabold ${note.totalAmountCents > 0 ? "text-emerald-400" : "text-slate-600"}`}>
+                                            {money(note.totalAmountCents)}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-slate-500 text-xs mt-2">
+                                            <Clock /> {timeAgo(lastTs)}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <button onClick={() => setShowNewModal(true)} className="fixed bottom-24 right-5 w-16 h-16 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition shadow-2xl shadow-indigo-950/60 flex items-center justify-center z-30">
+                        <Plus />
+                    </button>
+                    {showNewModal && (
+                        <Modal onClose={() => setShowNewModal(false)}>
+                            <div className="p-6">
+                                <div className="flex items-center justify-between mb-5">
+                                    <h2 className="text-white font-bold text-lg">Nouvelle ardoise</h2>
+                                    <button onClick={() => setShowNewModal(false)} className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><X /></button>
+                                </div>
+                                <label className="block text-sm font-semibold text-slate-300 mb-2">Nom du client / Identifiant *</label>
+                                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Emplacement 104 - Legrand" className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 mb-4" />
+                                <label className="block text-sm font-semibold text-slate-300 mb-2">Téléphone (optionnel)</label>
+                                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 12 34 56 78" inputMode="tel" className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+                                <button onClick={() => createNote(name, phone, false)} disabled={!name.trim()} className="w-full h-14 mt-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold active:scale-[0.98] transition">
+                                    Ouvrir l'ardoise
+                                </button>
+                            </div>
+                        </Modal>
+                    )}
+                    {duplicateWarning && (
+                        <Modal onClose={() => setDuplicateWarning(null)}>
+                            <div className="p-6">
+                                <div className="w-12 h-12 rounded-2xl bg-amber-950/60 flex items-center justify-center mb-4"><AlertTriangle /></div>
+                                <h2 className="text-white font-bold text-lg mb-2">Ardoise déjà ouverte</h2>
+                                <p className="text-slate-400 text-sm mb-6">Une ardoise est déjà ouverte au nom de « {duplicateWarning.name} ». Voulez-vous y accéder directement ou forcer une note homonyme ?</p>
+                                <div className="space-y-3">
+                                    <button onClick={() => { onOpenClient(duplicateWarning.existing.id); setDuplicateWarning(null); setShowNewModal(false); }} className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold active:scale-[0.98] transition">
+                                        Accéder à l'ardoise existante
+                                    </button>
+                                    <button onClick={() => createNote(duplicateWarning.name, duplicateWarning.phone || "", true)} className="w-full h-14 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-bold active:scale-[0.98] transition">
+                                        Forcer une note homonyme
+                                    </button>
+                                    <button onClick={() => setDuplicateWarning(null)} className="w-full h-12 rounded-2xl bg-slate-800 text-slate-300 font-semibold active:scale-[0.98] transition">
+                                        Annuler
+                                    </button>
+                                </div>
+                            </div>
+                        </Modal>
+                    )}
+                </div>
+            );
+        }
+        
+        // ── Application principale ──
+        function CampArdoise() {
+            const [barPassword, setBarPassword] = useState(() => localStorage.getItem(SESSION_KEY) || null);
+            const [bar, updateBar] = useBarState(barPassword);
+            const [tab, setTab] = useState("notes");
+            const [view, setView] = useState({ screen: "list" });
+            
+            const enterBar = (pwd) => {
+                localStorage.setItem(SESSION_KEY, pwd);
+                setBarPassword(pwd);
+            };
+            
+            if (!barPassword || !bar) {
+                return <AuthScreen onEnter={enterBar} />;
+            }
+            
+            // Version simplifiée
+            return (
+                <div className="min-h-screen bg-slate-950 font-sans">
+                    <div className="text-white p-4 text-center">
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                            <Wine />
+                            <h1 className="text-2xl font-bold">Camp'Ardoise</h1>
+                        </div>
+                        <p className="text-slate-400 text-sm">Votre bar est prêt !</p>
+                        
+                        <div className="max-w-md mx-auto mt-6 bg-slate-900 rounded-3xl p-6 border border-slate-800">
+                            <p className="text-slate-300 font-semibold">🔑 Mot de passe actif</p>
+                            <p className="text-indigo-400 text-xl font-bold mt-1">{barPassword}</p>
+                            <p className="text-slate-500 text-sm mt-3">Partagez ce mot de passe avec vos collaborateurs.</p>
+                            
+                            <div className="mt-6 space-y-3">
+                                <button 
+                                    onClick={() => {
+                                        const notes = (bar.clientNotes || []).filter(n => n.status === "active");
+                                        alert(`📋 ${notes.length} ardoise(s) active(s)\n💰 Total : ${money(notes.reduce((s, n) => s + n.totalAmountCents, 0))}`);
+                                    }}
+                                    className="w-full h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold active:scale-[0.98] transition"
+                                >
+                                    Voir les ardoises
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        const newNote = {
+                                            id: uid("note"),
+                                            name: `Client ${Math.floor(Math.random() * 100)}`,
+                                            phone: null,
+                                            status: "active",
+                                            createdAt: new Date().toISOString(),
+                                            closedAt: null,
+                                            paymentMethod: null,
+                                            orders: [],
+                                            totalAmountCents: 0,
+                                        };
+                                        updateBar((prev) => ({ ...prev, clientNotes: [...(prev.clientNotes || []), newNote] }));
+                                        alert(`✅ Ardoise créée pour ${newNote.name}`);
+                                    }}
+                                    className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold active:scale-[0.98] transition"
+                                >
+                                    + Nouvelle ardoise (test)
+                                </button>
+                                <button 
+                                    onClick={() => { localStorage.removeItem(SESSION_KEY); window.location.reload(); }}
+                                    className="w-full h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold active:scale-[0.98] transition"
+                                >
+                                    Déconnexion
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <p className="text-slate-600 text-xs mt-6">
+                            💡 Les données sont stockées dans votre navigateur.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<CampArdoise />);
