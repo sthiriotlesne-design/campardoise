@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -9,13 +8,9 @@
 <meta name="theme-color" content="#020617" />
 
 <script src="https://cdn.tailwindcss.com"></script>
-
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
-
 <script src="https://unpkg.com/lucide-react@0.383.0/dist/umd/lucide-react.js" crossorigin></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,17 +22,11 @@
   body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
   #root { min-height: 100vh; }
 </style>
-
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-
-/* ============================================================
-   CAMP'ARDOISE — Gestionnaire indépendant de notes de bar
-   Stockage: localStorage (contrat de données prêt pour Supabase/Firestore)
-   ============================================================ */
 
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 const {
@@ -53,7 +42,7 @@ const fromCents = (cents) => cents / 100;
 const fmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 const money = (cents) => fmt.format(fromCents(cents));
 
-const uid = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const uid = (prefix) => prefix + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
 
 const CATEGORY_ICONS = {
   cat_aperitif_partage: Utensils,
@@ -149,7 +138,7 @@ const SEED = {
     { id: "p50", categoryId: "cat_softs_eaux", name: "Petite Cristaline Pétillante", price: 1.0 },
     { id: "p51", categoryId: "cat_softs_eaux", name: "Evian 1,5L (avec repas) fraîche", price: 3.0 },
     { id: "p52", categoryId: "cat_softs_eaux", name: "Evian 1,5L (hors repas) fraîche", price: 5.0 },
-  ].map((p) => ({ ...p, imageUrl: null, priceCents: toCents(p.price) })),
+  ].map((p) => Object.assign({}, p, { imageUrl: null, priceCents: toCents(p.price) })),
   clientNotes: [],
 };
 
@@ -161,7 +150,7 @@ function loadBarState(barPassword) {
   if (!raw) return null;
   try {
     return JSON.parse(raw);
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -173,45 +162,47 @@ function barExists(barPassword) {
 }
 
 function useBarState(barPassword) {
-  const [state, setState] = useState(() => (barPassword ? loadBarState(barPassword) : null));
+  const [state, setState] = useState(function () {
+    return barPassword ? loadBarState(barPassword) : null;
+  });
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  useEffect(() => {
+  useEffect(function () {
     if (!barPassword) return;
     const fresh = loadBarState(barPassword);
     setState(fresh);
   }, [barPassword]);
 
-  useEffect(() => {
+  useEffect(function () {
     if (!barPassword) return;
     const key = STORAGE_PREFIX + barPassword;
-    const onStorage = (e) => {
+    const onStorage = function (e) {
       if (e.key === key && e.newValue) {
         try {
           setState(JSON.parse(e.newValue));
-        } catch {}
+        } catch (err) {}
       }
     };
     window.addEventListener("storage", onStorage);
-    const interval = setInterval(() => {
+    const interval = setInterval(function () {
       const raw = localStorage.getItem(key);
       if (!raw) return;
       if (raw !== JSON.stringify(stateRef.current)) {
         try {
           setState(JSON.parse(raw));
-        } catch {}
+        } catch (err) {}
       }
     }, 700);
-    return () => {
+    return function () {
       window.removeEventListener("storage", onStorage);
       clearInterval(interval);
     };
   }, [barPassword]);
 
   const update = useCallback(
-    (updater) => {
-      setState((prev) => {
+    function (updater) {
+      setState(function (prev) {
         const next = typeof updater === "function" ? updater(prev) : updater;
         if (barPassword) saveBarState(barPassword, next);
         return next;
@@ -227,7 +218,7 @@ function AuthScreen({ onEnter }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleCreate = () => {
+  const handleCreate = function () {
     const pwd = password.trim();
     if (!pwd) return setError("Merci de saisir un mot de passe pour créer l'espace.");
     if (barExists(pwd)) {
@@ -238,7 +229,7 @@ function AuthScreen({ onEnter }) {
     onEnter(pwd);
   };
 
-  const handleJoin = () => {
+  const handleJoin = function () {
     const pwd = password.trim();
     if (!pwd) return setError("Merci de saisir le mot de passe du bar à rejoindre.");
     if (!barExists(pwd)) {
@@ -266,7 +257,7 @@ function AuthScreen({ onEnter }) {
           <input
             type="text"
             value={password}
-            onChange={(e) => {
+            onChange={function (e) {
               setPassword(e.target.value);
               setError("");
             }}
@@ -322,15 +313,16 @@ function TopBar({ title, onBack, right }) {
   );
 }
 
-function Modal({ children, onClose, maxW = "max-w-md" }) {
+function Modal({ children, onClose, maxW }) {
+  const maxWClass = maxW || "max-w-md";
   return (
     <div
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className={`w-full ${maxW} bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto`}
-        onClick={(e) => e.stopPropagation()}
+        className={"w-full " + maxWClass + " bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto"}
+        onClick={function (e) { e.stopPropagation(); }}
       >
         {children}
       </div>
@@ -342,9 +334,9 @@ function timeAgo(iso) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return "à l'instant";
-  if (mins < 60) return `il y a ${mins} min`;
+  if (mins < 60) return "il y a " + mins + " min";
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `il y a ${hrs} h`;
+  if (hrs < 24) return "il y a " + hrs + " h";
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
@@ -353,32 +345,30 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
   const [showNewModal, setShowNewModal] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
-  const activeNotes = (bar.clientNotes || []).filter((n) => n.status === "active");
+  const activeNotes = (bar.clientNotes || []).filter(function (n) { return n.status === "active"; });
 
-  const filtered = useMemo(() => {
+  const filtered = useMemo(function () {
     const q = search.trim().toLowerCase();
     if (!q) return activeNotes;
-    return activeNotes.filter(
-      (n) =>
-        n.name.toLowerCase().includes(q) ||
-        (n.phone || "").toLowerCase().includes(q)
-    );
+    return activeNotes.filter(function (n) {
+      return n.name.toLowerCase().includes(q) || (n.phone || "").toLowerCase().includes(q);
+    });
   }, [activeNotes, search]);
 
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = filtered.slice().sort(function (a, b) {
     const aLast = a.orders.length ? a.orders[a.orders.length - 1].timestamp : a.createdAt;
     const bLast = b.orders.length ? b.orders[b.orders.length - 1].timestamp : b.createdAt;
     return new Date(bLast) - new Date(aLast);
   });
 
-  const createNote = (name, phone, force) => {
+  const createNote = function (name, phone, force) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const existing = activeNotes.find(
-      (n) => n.name.trim().toLowerCase() === trimmed.toLowerCase()
-    );
+    const existing = activeNotes.find(function (n) {
+      return n.name.trim().toLowerCase() === trimmed.toLowerCase();
+    });
     if (existing && !force) {
-      setDuplicateWarning({ name: trimmed, existing, phone });
+      setDuplicateWarning({ name: trimmed, existing: existing, phone: phone });
       return;
     }
     const newNote = {
@@ -392,7 +382,9 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
       orders: [],
       totalAmountCents: 0,
     };
-    updateBar((prev) => ({ ...prev, clientNotes: [...(prev.clientNotes || []), newNote] }));
+    updateBar(function (prev) {
+      return Object.assign({}, prev, { clientNotes: (prev.clientNotes || []).concat([newNote]) });
+    });
     setShowNewModal(false);
     setDuplicateWarning(null);
   };
@@ -413,7 +405,7 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
           <Search className="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={function (e) { setSearch(e.target.value); }}
             placeholder="Rechercher un client..."
             className="w-full h-14 pl-12 pr-4 rounded-2xl bg-slate-900 text-white placeholder-slate-500 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
           />
@@ -434,14 +426,12 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
         </div>
       ) : (
         <div className="px-4 mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sorted.map((note) => {
-            const lastTs = note.orders.length
-              ? note.orders[note.orders.length - 1].timestamp
-              : note.createdAt;
+          {sorted.map(function (note) {
+            const lastTs = note.orders.length ? note.orders[note.orders.length - 1].timestamp : note.createdAt;
             return (
               <button
                 key={note.id}
-                onClick={() => onOpenClient(note.id)}
+                onClick={function () { onOpenClient(note.id); }}
                 className="text-left bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-3xl p-5 transition active:scale-[0.98] shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -454,11 +444,7 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
                     {note.phone}
                   </div>
                 )}
-                <div
-                  className={`mt-4 text-3xl font-extrabold ${
-                    note.totalAmountCents > 0 ? "text-emerald-400" : "text-slate-600"
-                  }`}
-                >
+                <div className={"mt-4 text-3xl font-extrabold " + (note.totalAmountCents > 0 ? "text-emerald-400" : "text-slate-600")}>
                   {money(note.totalAmountCents)}
                 </div>
                 <div className="flex items-center gap-1.5 text-slate-500 text-xs mt-2">
@@ -472,7 +458,7 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
       )}
 
       <button
-        onClick={() => setShowNewModal(true)}
+        onClick={function () { setShowNewModal(true); }}
         className="fixed bottom-24 right-5 w-16 h-16 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition shadow-2xl shadow-indigo-950/60 flex items-center justify-center z-30"
         aria-label="Nouvelle ardoise"
       >
@@ -481,13 +467,13 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
 
       {showNewModal && (
         <NewClientModal
-          onClose={() => setShowNewModal(false)}
+          onClose={function () { setShowNewModal(false); }}
           onCreate={createNote}
         />
       )}
 
       {duplicateWarning && (
-        <Modal onClose={() => setDuplicateWarning(null)}>
+        <Modal onClose={function () { setDuplicateWarning(null); }}>
           <div className="p-6">
             <div className="w-12 h-12 rounded-2xl bg-amber-950/60 flex items-center justify-center mb-4">
               <AlertTriangle className="w-6 h-6 text-amber-400" />
@@ -499,7 +485,7 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => {
+                onClick={function () {
                   onOpenClient(duplicateWarning.existing.id);
                   setDuplicateWarning(null);
                   setShowNewModal(false);
@@ -509,15 +495,15 @@ function ClientNotesTab({ bar, updateBar, onOpenClient }) {
                 Accéder à l'ardoise existante
               </button>
               <button
-                onClick={() =>
-                  createNote(duplicateWarning.name, duplicateWarning.phone || "", true)
-                }
+                onClick={function () {
+                  createNote(duplicateWarning.name, duplicateWarning.phone || "", true);
+                }}
                 className="w-full h-14 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-bold active:scale-[0.98] transition"
               >
                 Forcer une note homonyme
               </button>
               <button
-                onClick={() => setDuplicateWarning(null)}
+                onClick={function () { setDuplicateWarning(null); }}
                 className="w-full h-12 rounded-2xl bg-slate-800 text-slate-300 font-semibold active:scale-[0.98] transition"
               >
                 Annuler
@@ -548,7 +534,7 @@ function NewClientModal({ onClose, onCreate }) {
         <input
           autoFocus
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={function (e) { setName(e.target.value); }}
           placeholder="Ex: Emplacement 104 - Legrand"
           className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 mb-4"
         />
@@ -557,13 +543,13 @@ function NewClientModal({ onClose, onCreate }) {
         </label>
         <input
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={function (e) { setPhone(e.target.value); }}
           placeholder="06 12 34 56 78"
           inputMode="tel"
           className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
         />
         <button
-          onClick={() => onCreate(name, phone, false)}
+          onClick={function () { onCreate(name, phone, false); }}
           disabled={!name.trim()}
           className="w-full h-14 mt-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold active:scale-[0.98] transition"
         >
@@ -575,13 +561,12 @@ function NewClientModal({ onClose, onCreate }) {
 }
 
 function OrderScreen({ bar, updateBar, noteId, onBack }) {
-  const note = (bar.clientNotes || []).find((n) => n.id === noteId);
-  const categories = [...(bar.categories || [])].sort((a, b) => a.displayOrder - b.displayOrder);
-  const [activeCat, setActiveCat] = useState(categories[0]?.id || null);
+  const note = (bar.clientNotes || []).find(function (n) { return n.id === noteId; });
+  const categories = (bar.categories || []).slice().sort(function (a, b) { return a.displayOrder - b.displayOrder; });
+  const [activeCat, setActiveCat] = useState(categories[0] ? categories[0].id : null);
   const [cart, setCart] = useState({});
   const [modifierPrompt, setModifierPrompt] = useState(null);
   const [cartOpen, setCartOpen] = useState(true);
-  const [closing, setClosing] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const searchInputRef = useRef(null);
 
@@ -598,41 +583,40 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
 
   const searchActive = productSearch.trim().length > 0;
   const products = searchActive
-    ? (bar.products || []).filter((p) => fuzzyMatch(p.name, productSearch))
-    : (bar.products || []).filter((p) => p.categoryId === activeCat);
+    ? (bar.products || []).filter(function (p) { return fuzzyMatch(p.name, productSearch); })
+    : (bar.products || []).filter(function (p) { return p.categoryId === activeCat; });
   const options = bar.options || [];
 
-  const cartEntries = Object.values(cart);
-  const cartCount = cartEntries.reduce((s, e) => s + e.qty, 0);
-  const cartTotalCents = cartEntries.reduce((s, e) => {
-    const product = bar.products.find((p) => p.id === e.productId);
-    const opt = options.find((o) => o.id === e.optionId);
-    const unit = (product?.priceCents || 0) + (opt ? toCents(opt.additionalPrice) : 0);
+  const cartEntries = Object.keys(cart).map(function (k) { return cart[k]; });
+  const cartCount = cartEntries.reduce(function (s, e) { return s + e.qty; }, 0);
+  const cartTotalCents = cartEntries.reduce(function (s, e) {
+    const product = bar.products.find(function (p) { return p.id === e.productId; });
+    const opt = options.find(function (o) { return o.id === e.optionId; });
+    const unit = (product ? product.priceCents : 0) + (opt ? toCents(opt.additionalPrice) : 0);
     return s + unit * e.qty;
   }, 0);
 
-  const qtyForProductBase = (productId) => {
+  const qtyForProductBase = function (productId) {
     return cartEntries
-      .filter((e) => e.productId === productId)
-      .reduce((s, e) => s + e.qty, 0);
+      .filter(function (e) { return e.productId === productId; })
+      .reduce(function (s, e) { return s + e.qty; }, 0);
   };
 
-  const addToCart = (productId, optionId) => {
-    const key = `${productId}::${optionId || "none"}`;
-    setCart((prev) => {
+  const addToCart = function (productId, optionId) {
+    const key = productId + "::" + (optionId || "none");
+    setCart(function (prev) {
       const existing = prev[key];
-      return {
-        ...prev,
-        [key]: {
-          productId,
-          optionId: optionId || null,
-          qty: (existing?.qty || 0) + 1,
-        },
+      const next = Object.assign({}, prev);
+      next[key] = {
+        productId: productId,
+        optionId: optionId || null,
+        qty: (existing ? existing.qty : 0) + 1,
       };
+      return next;
     });
   };
 
-  const handleProductTap = (product) => {
+  const handleProductTap = function (product) {
     if (MODIFIABLE_CATEGORIES.has(product.categoryId)) {
       setModifierPrompt(product);
     } else {
@@ -640,55 +624,52 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
     }
   };
 
-  const adjustCartQty = (key, delta) => {
-    setCart((prev) => {
+  const adjustCartQty = function (key, delta) {
+    setCart(function (prev) {
       const item = prev[key];
       if (!item) return prev;
       const newQty = item.qty + delta;
+      const next = Object.assign({}, prev);
       if (newQty <= 0) {
-        const { [key]: _, ...rest } = prev;
-        return rest;
+        delete next[key];
+      } else {
+        next[key] = Object.assign({}, item, { qty: newQty });
       }
-      return { ...prev, [key]: { ...item, qty: newQty } };
+      return next;
     });
   };
 
-  const validateOrder = () => {
+  const validateOrder = function () {
     if (cartEntries.length === 0) return;
-    const items = cartEntries.map((e) => {
-      const product = bar.products.find((p) => p.id === e.productId);
-      const opt = options.find((o) => o.id === e.optionId);
-      const unitCents = (product?.priceCents || 0) + (opt ? toCents(opt.additionalPrice) : 0);
+    const items = cartEntries.map(function (e) {
+      const product = bar.products.find(function (p) { return p.id === e.productId; });
+      const opt = options.find(function (o) { return o.id === e.optionId; });
+      const unitCents = (product ? product.priceCents : 0) + (opt ? toCents(opt.additionalPrice) : 0);
       return {
         productId: e.productId,
-        productName: product?.name || "Produit",
+        productName: product ? product.name : "Produit",
         optionId: e.optionId,
-        optionName: opt?.name || null,
+        optionName: opt ? opt.name : null,
         quantity: e.qty,
         priceAtPurchase: fromCents(unitCents),
         priceAtPurchaseCents: unitCents,
       };
     });
-    const orderTotal = items.reduce((s, it) => s + it.priceAtPurchaseCents * it.quantity, 0);
+    const orderTotal = items.reduce(function (s, it) { return s + it.priceAtPurchaseCents * it.quantity; }, 0);
 
-    updateBar((prev) => ({
-      ...prev,
-      clientNotes: prev.clientNotes.map((n) =>
-        n.id === noteId
-          ? {
-              ...n,
-              orders: [
-                ...n.orders,
-                { orderId: uid("ord"), timestamp: new Date().toISOString(), items },
-              ],
-              totalAmountCents: n.totalAmountCents + orderTotal,
-            }
-          : n
-      ),
-    }));
+    updateBar(function (prev) {
+      return Object.assign({}, prev, {
+        clientNotes: prev.clientNotes.map(function (n) {
+          if (n.id !== noteId) return n;
+          return Object.assign({}, n, {
+            orders: n.orders.concat([{ orderId: uid("ord"), timestamp: new Date().toISOString(), items: items }]),
+            totalAmountCents: n.totalAmountCents + orderTotal,
+          });
+        }),
+      });
+    });
     setCart({});
-    setClosing(true);
-    setTimeout(() => onBack(), 350);
+    setTimeout(function () { onBack(); }, 350);
   };
 
   return (
@@ -701,7 +682,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
           <input
             ref={searchInputRef}
             value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
+            onChange={function (e) { setProductSearch(e.target.value); }}
             placeholder="Rechercher un article... (ex: Ver, He, Mojito)"
             className="w-full h-14 pl-12 pr-14 rounded-2xl bg-slate-900 text-white placeholder-slate-500 border border-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-base"
             autoComplete="off"
@@ -709,9 +690,9 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
           {searchActive && (
             <button
               type="button"
-              onClick={() => {
+              onClick={function () {
                 setProductSearch("");
-                searchInputRef.current?.blur();
+                if (searchInputRef.current) searchInputRef.current.blur();
               }}
               className="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-90 transition flex items-center justify-center"
               aria-label="Effacer la recherche"
@@ -732,18 +713,14 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
       {!searchActive && (
         <div className="mt-3 px-4">
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 no-scrollbar">
-            {categories.map((cat) => {
+            {categories.map(function (cat) {
               const Icon = iconFor(cat.id);
               const active = cat.id === activeCat;
               return (
                 <button
                   key={cat.id}
-                  onClick={() => setActiveCat(cat.id)}
-                  className={`shrink-0 flex items-center gap-2 h-12 px-4 rounded-2xl font-semibold text-sm whitespace-nowrap transition active:scale-95 ${
-                    active
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-950/40"
-                      : "bg-slate-900 text-slate-400 border border-slate-800"
-                  }`}
+                  onClick={function () { setActiveCat(cat.id); }}
+                  className={"shrink-0 flex items-center gap-2 h-12 px-4 rounded-2xl font-semibold text-sm whitespace-nowrap transition active:scale-95 " + (active ? "bg-indigo-600 text-white shadow-lg shadow-indigo-950/40" : "bg-slate-900 text-slate-400 border border-slate-800")}
                 >
                   <Icon className="w-4 h-4" />
                   {cat.name}
@@ -755,14 +732,11 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
       )}
 
       <div className="px-4 mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {products.map((product) => {
+        {products.map(function (product) {
           const qty = qtyForProductBase(product.id);
           const Icon = iconFor(product.categoryId);
           return (
-            <div
-              key={product.id}
-              className="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm"
-            >
+            <div key={product.id} className="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
               {qty > 0 && (
                 <span className="absolute -top-2 -right-2 min-w-7 h-7 px-1.5 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shadow-lg z-10">
                   x{qty}
@@ -779,7 +753,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
               </div>
               <button
                 type="button"
-                onClick={() => handleProductTap(product)}
+                onClick={function () { handleProductTap(product); }}
                 className="w-full h-[56px] rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 active:scale-[0.95] transition-all duration-100 text-white font-extrabold text-base tracking-wide uppercase flex items-center justify-center gap-2 shadow-md shadow-indigo-950/40 select-none"
               >
                 <Plus className="w-5 h-5 shrink-0" strokeWidth={3} />
@@ -796,7 +770,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
       </div>
 
       {modifierPrompt && (
-        <Modal onClose={() => setModifierPrompt(null)}>
+        <Modal onClose={function () { setModifierPrompt(null); }}>
           <div className="p-6">
             <h2 className="text-white font-bold text-lg mb-1">{modifierPrompt.name}</h2>
             <p className="text-slate-500 text-sm mb-5">
@@ -804,7 +778,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => {
+                onClick={function () {
                   addToCart(modifierPrompt.id, null);
                   setModifierPrompt(null);
                 }}
@@ -813,21 +787,23 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
                 <span>Sans supplément</span>
                 <span className="text-slate-400 font-semibold">{money(modifierPrompt.priceCents)}</span>
               </button>
-              {options.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => {
-                    addToCart(modifierPrompt.id, opt.id);
-                    setModifierPrompt(null);
-                  }}
-                  className="w-full h-14 rounded-2xl bg-amber-950/50 hover:bg-amber-900/50 border border-amber-900 text-amber-200 font-bold active:scale-[0.98] transition flex items-center justify-between px-5"
-                >
-                  <span>+ {opt.name}</span>
-                  <span className="font-semibold">
-                    {money(modifierPrompt.priceCents + toCents(opt.additionalPrice))}
-                  </span>
-                </button>
-              ))}
+              {options.map(function (opt) {
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={function () {
+                      addToCart(modifierPrompt.id, opt.id);
+                      setModifierPrompt(null);
+                    }}
+                    className="w-full h-14 rounded-2xl bg-amber-950/50 hover:bg-amber-900/50 border border-amber-900 text-amber-200 font-bold active:scale-[0.98] transition flex items-center justify-between px-5"
+                  >
+                    <span>+ {opt.name}</span>
+                    <span className="font-semibold">
+                      {money(modifierPrompt.priceCents + toCents(opt.additionalPrice))}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </Modal>
@@ -836,7 +812,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
       {cartCount > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900 border-t border-slate-800 rounded-t-3xl shadow-2xl">
           <button
-            onClick={() => setCartOpen((v) => !v)}
+            onClick={function () { setCartOpen(function (v) { return !v; }); }}
             className="w-full flex items-center justify-between px-5 py-3"
           >
             <span className="text-slate-300 font-semibold text-sm">
@@ -847,30 +823,30 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
 
           {cartOpen && (
             <div className="px-5 pb-3 max-h-52 overflow-y-auto space-y-2">
-              {cartEntries.map((e) => {
-                const product = bar.products.find((p) => p.id === e.productId);
-                const opt = options.find((o) => o.id === e.optionId);
-                const key = `${e.productId}::${e.optionId || "none"}`;
-                const unitCents = (product?.priceCents || 0) + (opt ? toCents(opt.additionalPrice) : 0);
+              {cartEntries.map(function (e) {
+                const product = bar.products.find(function (p) { return p.id === e.productId; });
+                const opt = options.find(function (o) { return o.id === e.optionId; });
+                const key = e.productId + "::" + (e.optionId || "none");
+                const unitCents = (product ? product.priceCents : 0) + (opt ? toCents(opt.additionalPrice) : 0);
                 return (
                   <div key={key} className="flex items-center justify-between bg-slate-800 rounded-xl px-3 py-2">
                     <div className="min-w-0">
                       <div className="text-white text-sm font-semibold truncate">
-                        {product?.name}
+                        {product ? product.name : ""}
                         {opt && <span className="text-amber-400"> ({opt.name})</span>}
                       </div>
                       <div className="text-slate-500 text-xs">{money(unitCents)} / unité</div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => adjustCartQty(key, -1)}
+                        onClick={function () { adjustCartQty(key, -1); }}
                         className="w-9 h-9 rounded-xl bg-slate-700 flex items-center justify-center active:scale-90 transition"
                       >
                         <Minus className="w-4 h-4 text-white" />
                       </button>
                       <span className="text-white font-bold w-6 text-center">{e.qty}</span>
                       <button
-                        onClick={() => adjustCartQty(key, 1)}
+                        onClick={function () { adjustCartQty(key, 1); }}
                         className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center active:scale-90 transition"
                       >
                         <Plus className="w-4 h-4 text-white" />
@@ -898,7 +874,7 @@ function OrderScreen({ bar, updateBar, noteId, onBack }) {
 }
 
 function ClientDetailScreen({ bar, updateBar, noteId, onBack, onOrder }) {
-  const note = (bar.clientNotes || []).find((n) => n.id === noteId);
+  const note = (bar.clientNotes || []).find(function (n) { return n.id === noteId; });
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [sumupError, setSumupError] = useState("");
 
@@ -911,38 +887,35 @@ function ClientDetailScreen({ bar, updateBar, noteId, onBack, onOrder }) {
     );
   }
 
-  const closeNote = (paymentMethod) => {
-    updateBar((prev) => ({
-      ...prev,
-      clientNotes: prev.clientNotes.map((n) =>
-        n.id === noteId
-          ? {
-              ...n,
-              status: "paye",
-              closedAt: new Date().toISOString(),
-              paymentMethod,
-            }
-          : n
-      ),
-    }));
+  const closeNote = function (paymentMethod) {
+    updateBar(function (prev) {
+      return Object.assign({}, prev, {
+        clientNotes: prev.clientNotes.map(function (n) {
+          if (n.id !== noteId) return n;
+          return Object.assign({}, n, {
+            status: "paye",
+            closedAt: new Date().toISOString(),
+            paymentMethod: paymentMethod,
+          });
+        }),
+      });
+    });
     setShowCloseModal(false);
     onBack();
   };
 
-  const triggerSumUp = () => {
+  const triggerSumUp = function () {
     setSumupError("");
     const amount = fromCents(note.totalAmountCents).toFixed(2);
-    const url = `sumupmerchant://pay/1.0?total=${amount}&currency=EUR&title=${encodeURIComponent(
-      "Ardoise_" + note.name
-    )}&callback=${encodeURIComponent(window.location.origin + "/sumup-callback")}`;
+    const url = "sumupmerchant://pay/1.0?total=" + amount + "&currency=EUR&title=" +
+      encodeURIComponent("Ardoise_" + note.name) +
+      "&callback=" + encodeURIComponent(window.location.origin + "/sumup-callback");
     try {
       window.location.href = url;
-      setTimeout(() => {
-        setSumupError(
-          "L'application SumUp n'a pas répondu. Vérifiez qu'elle est installée sur cet appareil, ou encaissez manuellement puis cliquez sur « Marquer comme Payé »."
-        );
+      setTimeout(function () {
+        setSumupError("L'application SumUp n'a pas répondu. Vérifiez qu'elle est installée sur cet appareil, ou encaissez manuellement puis cliquez sur « Marquer comme Payé ».");
       }, 1500);
-    } catch {
+    } catch (e) {
       setSumupError("Ce navigateur ne prend pas en charge l'ouverture directe de SumUp.");
     }
   };
@@ -963,7 +936,7 @@ function ClientDetailScreen({ bar, updateBar, noteId, onBack, onOrder }) {
         </div>
 
         <button
-          onClick={() => onOrder(note.id)}
+          onClick={function () { onOrder(note.id); }}
           className="w-full h-16 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base active:scale-[0.98] transition flex items-center justify-center gap-2"
         >
           <Plus className="w-5 h-5" />
@@ -986,7 +959,7 @@ function ClientDetailScreen({ bar, updateBar, noteId, onBack, onOrder }) {
             </div>
           )}
           <button
-            onClick={() => setShowCloseModal(true)}
+            onClick={function () { setShowCloseModal(true); }}
             disabled={note.totalAmountCents === 0}
             className="w-full h-16 rounded-2xl bg-slate-900 border border-slate-800 hover:bg-slate-800 disabled:opacity-40 text-white font-bold active:scale-[0.98] transition flex items-center justify-center gap-2"
           >
@@ -1001,49 +974,53 @@ function ClientDetailScreen({ bar, updateBar, noteId, onBack, onOrder }) {
             <p className="text-slate-600 text-sm px-1">Aucun article ajouté pour l'instant.</p>
           ) : (
             <div className="space-y-2">
-              {[...note.orders].reverse().map((order) => (
-                <div key={order.orderId} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                  <div className="text-slate-500 text-xs font-medium mb-2">
-                    {new Date(order.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+              {note.orders.slice().reverse().map(function (order) {
+                return (
+                  <div key={order.orderId} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                    <div className="text-slate-500 text-xs font-medium mb-2">
+                      {new Date(order.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                    <ul className="space-y-1">
+                      {order.items.map(function (it, i) {
+                        return (
+                          <li key={i} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-300">
+                              {it.quantity}x {it.productName}
+                              {it.optionName && <span className="text-amber-400"> ({it.optionName})</span>}
+                            </span>
+                            <span className="text-slate-400 font-medium">
+                              {money(it.priceAtPurchaseCents * it.quantity)}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                  <ul className="space-y-1">
-                    {order.items.map((it, i) => (
-                      <li key={i} className="flex items-center justify-between text-sm">
-                        <span className="text-slate-300">
-                          {it.quantity}x {it.productName}
-                          {it.optionName && <span className="text-amber-400"> ({it.optionName})</span>}
-                        </span>
-                        <span className="text-slate-400 font-medium">
-                          {money(it.priceAtPurchaseCents * it.quantity)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
       {showCloseModal && (
-        <Modal onClose={() => setShowCloseModal(false)}>
+        <Modal onClose={function () { setShowCloseModal(false); }}>
           <div className="p-6">
             <h2 className="text-white font-bold text-lg mb-1">Clôturer l'ardoise</h2>
             <p className="text-slate-400 text-sm mb-1">Montant à régler</p>
             <p className="text-4xl font-extrabold text-emerald-400 mb-6">{money(note.totalAmountCents)}</p>
             <p className="text-slate-300 text-sm font-semibold mb-3">Moyen de paiement utilisé</p>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => closeNote("Espèces")} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+              <button onClick={function () { closeNote("Espèces"); }} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
                 <Banknote className="w-5 h-5" /> Espèces
               </button>
-              <button onClick={() => closeNote("Carte Bancaire")} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+              <button onClick={function () { closeNote("Carte Bancaire"); }} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
                 <CreditCard className="w-5 h-5" /> Carte Bancaire
               </button>
-              <button onClick={() => closeNote("Chèque")} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+              <button onClick={function () { closeNote("Chèque"); }} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
                 <FileCheck2 className="w-5 h-5" /> Chèque
               </button>
-              <button onClick={() => closeNote("Autre")} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
+              <button onClick={function () { closeNote("Autre"); }} className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex flex-col items-center justify-center gap-1 active:scale-95 transition">
                 <MoreHorizontal className="w-5 h-5" /> Autre
               </button>
             </div>
@@ -1060,64 +1037,78 @@ function AdminTab({ bar, updateBar }) {
   const [catInput, setCatInput] = useState("");
   const [deletingCat, setDeletingCat] = useState(null);
 
-  const categories = [...(bar.categories || [])].sort((a, b) => a.displayOrder - b.displayOrder);
+  const categories = (bar.categories || []).slice().sort(function (a, b) { return a.displayOrder - b.displayOrder; });
 
-  const addCategory = () => {
+  const addCategory = function () {
     const name = catInput.trim();
     if (!name) return;
+    const lastCat = categories[categories.length - 1];
     const newCat = {
       id: uid("cat"),
-      name,
-      displayOrder: (categories[categories.length - 1]?.displayOrder || 0) + 1,
+      name: name,
+      displayOrder: (lastCat ? lastCat.displayOrder : 0) + 1,
     };
-    updateBar((prev) => ({ ...prev, categories: [...prev.categories, newCat] }));
+    updateBar(function (prev) {
+      return Object.assign({}, prev, { categories: prev.categories.concat([newCat]) });
+    });
     setCatInput("");
   };
 
-  const renameCategory = (id, name) => {
-    updateBar((prev) => ({
-      ...prev,
-      categories: prev.categories.map((c) => (c.id === id ? { ...c, name } : c)),
-    }));
+  const renameCategory = function (id, name) {
+    updateBar(function (prev) {
+      return Object.assign({}, prev, {
+        categories: prev.categories.map(function (c) {
+          return c.id === id ? Object.assign({}, c, { name: name }) : c;
+        }),
+      });
+    });
   };
 
-  const confirmDeleteCategory = (deleteProducts) => {
+  const confirmDeleteCategory = function (deleteProducts) {
     const catId = deletingCat.id;
-    updateBar((prev) => ({
-      ...prev,
-      categories: prev.categories.filter((c) => c.id !== catId),
-      products: deleteProducts
-        ? prev.products.filter((p) => p.categoryId !== catId)
-        : prev.products,
-    }));
+    updateBar(function (prev) {
+      return Object.assign({}, prev, {
+        categories: prev.categories.filter(function (c) { return c.id !== catId; }),
+        products: deleteProducts
+          ? prev.products.filter(function (p) { return p.categoryId !== catId; })
+          : prev.products,
+      });
+    });
     setDeletingCat(null);
   };
 
-  const saveProduct = (data) => {
+  const saveProduct = function (data) {
     const priceCents = toCents(parseFloat(data.price) || 0);
     if (data.id) {
-      updateBar((prev) => ({
-        ...prev,
-        products: prev.products.map((p) =>
-          p.id === data.id ? { ...p, ...data, price: parseFloat(data.price), priceCents } : p
-        ),
-      }));
+      updateBar(function (prev) {
+        return Object.assign({}, prev, {
+          products: prev.products.map(function (p) {
+            return p.id === data.id
+              ? Object.assign({}, p, data, { price: parseFloat(data.price), priceCents: priceCents })
+              : p;
+          }),
+        });
+      });
     } else {
       const newProduct = {
         id: uid("prod"),
         categoryId: data.categoryId,
         name: data.name,
         price: parseFloat(data.price),
-        priceCents,
+        priceCents: priceCents,
         imageUrl: data.imageUrl || null,
       };
-      updateBar((prev) => ({ ...prev, products: [...prev.products, newProduct] }));
+      updateBar(function (prev) {
+        return Object.assign({}, prev, { products: prev.products.concat([newProduct]) });
+      });
     }
     setEditingProduct(null);
   };
 
-  const deleteProduct = (id) => {
-    updateBar((prev) => ({ ...prev, products: prev.products.filter((p) => p.id !== id) }));
+  const deleteProduct = function (id) {
+    updateBar(function (prev) {
+      return Object.assign({}, prev, { products: prev.products.filter(function (p) { return p.id !== id; }) });
+    });
   };
 
   return (
@@ -1126,18 +1117,14 @@ function AdminTab({ bar, updateBar }) {
 
       <div className="px-4 pt-3 flex gap-2">
         <button
-          onClick={() => setTab("products")}
-          className={`flex-1 h-12 rounded-2xl font-semibold text-sm transition ${
-            tab === "products" ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
-          }`}
+          onClick={function () { setTab("products"); }}
+          className={"flex-1 h-12 rounded-2xl font-semibold text-sm transition " + (tab === "products" ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800")}
         >
           Produits
         </button>
         <button
-          onClick={() => setTab("categories")}
-          className={`flex-1 h-12 rounded-2xl font-semibold text-sm transition ${
-            tab === "categories" ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
-          }`}
+          onClick={function () { setTab("categories"); }}
+          className={"flex-1 h-12 rounded-2xl font-semibold text-sm transition " + (tab === "categories" ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800")}
         >
           Catégories
         </button>
@@ -1148,9 +1135,9 @@ function AdminTab({ bar, updateBar }) {
           <div className="flex gap-2 mb-4">
             <input
               value={catInput}
-              onChange={(e) => setCatInput(e.target.value)}
+              onChange={function (e) { setCatInput(e.target.value); }}
               placeholder="Nouvelle catégorie..."
-              onKeyDown={(e) => e.key === "Enter" && addCategory()}
+              onKeyDown={function (e) { if (e.key === "Enter") addCategory(); }}
               className="flex-1 h-12 px-4 rounded-2xl bg-slate-900 text-white placeholder-slate-500 border border-slate-800 focus:border-indigo-500 focus:outline-none"
             />
             <button
@@ -1161,21 +1148,23 @@ function AdminTab({ bar, updateBar }) {
             </button>
           </div>
           <div className="space-y-2">
-            {categories.map((cat) => (
-              <div key={cat.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center gap-2">
-                <input
-                  defaultValue={cat.name}
-                  onBlur={(e) => renameCategory(cat.id, e.target.value.trim() || cat.name)}
-                  className="flex-1 bg-transparent text-white font-semibold px-2 py-2 rounded-xl focus:bg-slate-800 focus:outline-none"
-                />
-                <button
-                  onClick={() => setDeletingCat(cat)}
-                  className="w-11 h-11 rounded-xl bg-rose-950/60 flex items-center justify-center active:scale-90 transition shrink-0"
-                >
-                  <Trash2 className="w-4 h-4 text-rose-400" />
-                </button>
-              </div>
-            ))}
+            {categories.map(function (cat) {
+              return (
+                <div key={cat.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center gap-2">
+                  <input
+                    defaultValue={cat.name}
+                    onBlur={function (e) { renameCategory(cat.id, e.target.value.trim() || cat.name); }}
+                    className="flex-1 bg-transparent text-white font-semibold px-2 py-2 rounded-xl focus:bg-slate-800 focus:outline-none"
+                  />
+                  <button
+                    onClick={function () { setDeletingCat(cat); }}
+                    className="w-11 h-11 rounded-xl bg-rose-950/60 flex items-center justify-center active:scale-90 transition shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1183,46 +1172,48 @@ function AdminTab({ bar, updateBar }) {
       {tab === "products" && (
         <div className="px-4 mt-4">
           <button
-            onClick={() => setEditingProduct({})}
+            onClick={function () { setEditingProduct({}); }}
             className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold active:scale-[0.98] transition flex items-center justify-center gap-2 mb-4"
           >
             <Plus className="w-5 h-5" /> Nouveau produit
           </button>
           <div className="space-y-2">
-            {categories.map((cat) => {
-              const prods = bar.products.filter((p) => p.categoryId === cat.id);
+            {categories.map(function (cat) {
+              const prods = bar.products.filter(function (p) { return p.categoryId === cat.id; });
               if (prods.length === 0) return null;
               return (
                 <div key={cat.id} className="mb-4">
                   <h4 className="text-slate-500 text-xs font-bold uppercase tracking-wide px-1 mb-2">{cat.name}</h4>
                   <div className="space-y-2">
-                    {prods.map((p) => (
-                      <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            React.createElement(iconFor(p.categoryId), { className: "w-5 h-5 text-indigo-400" })
-                          )}
+                    {prods.map(function (p) {
+                      return (
+                        <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              React.createElement(iconFor(p.categoryId), { className: "w-5 h-5 text-indigo-400" })
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white font-semibold text-sm truncate">{p.name}</div>
+                            <div className="text-slate-500 text-xs">{money(p.priceCents)}</div>
+                          </div>
+                          <button
+                            onClick={function () { setEditingProduct(p); }}
+                            className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center active:scale-90 transition shrink-0"
+                          >
+                            <Pencil className="w-4 h-4 text-slate-300" />
+                          </button>
+                          <button
+                            onClick={function () { deleteProduct(p.id); }}
+                            className="w-10 h-10 rounded-xl bg-rose-950/60 flex items-center justify-center active:scale-90 transition shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-400" />
+                          </button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-white font-semibold text-sm truncate">{p.name}</div>
-                          <div className="text-slate-500 text-xs">{money(p.priceCents)}</div>
-                        </div>
-                        <button
-                          onClick={() => setEditingProduct(p)}
-                          className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center active:scale-90 transition shrink-0"
-                        >
-                          <Pencil className="w-4 h-4 text-slate-300" />
-                        </button>
-                        <button
-                          onClick={() => deleteProduct(p.id)}
-                          className="w-10 h-10 rounded-xl bg-rose-950/60 flex items-center justify-center active:scale-90 transition shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4 text-rose-400" />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -1235,13 +1226,13 @@ function AdminTab({ bar, updateBar }) {
         <ProductFormModal
           product={editingProduct}
           categories={categories}
-          onClose={() => setEditingProduct(null)}
+          onClose={function () { setEditingProduct(null); }}
           onSave={saveProduct}
         />
       )}
 
       {deletingCat && (
-        <Modal onClose={() => setDeletingCat(null)}>
+        <Modal onClose={function () { setDeletingCat(null); }}>
           <div className="p-6">
             <h2 className="text-white font-bold text-lg mb-2">Supprimer « {deletingCat.name} »</h2>
             <p className="text-slate-400 text-sm mb-6">
@@ -1249,19 +1240,19 @@ function AdminTab({ bar, updateBar }) {
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => confirmDeleteCategory(true)}
+                onClick={function () { confirmDeleteCategory(true); }}
                 className="w-full h-14 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold active:scale-[0.98] transition"
               >
                 Supprimer aussi les produits
               </button>
               <button
-                onClick={() => confirmDeleteCategory(false)}
+                onClick={function () { confirmDeleteCategory(false); }}
                 className="w-full h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold active:scale-[0.98] transition"
               >
                 Conserver les produits (à réassigner)
               </button>
               <button
-                onClick={() => setDeletingCat(null)}
+                onClick={function () { setDeletingCat(null); }}
                 className="w-full h-12 rounded-2xl text-slate-400 font-semibold active:scale-[0.98] transition"
               >
                 Annuler
@@ -1278,15 +1269,15 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
   const isNew = !product.id;
   const [name, setName] = useState(product.name || "");
   const [price, setPrice] = useState(product.price != null ? String(product.price) : "");
-  const [categoryId, setCategoryId] = useState(product.categoryId || categories[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(product.categoryId || (categories[0] ? categories[0].id : ""));
   const [imageUrl, setImageUrl] = useState(product.imageUrl || "");
   const fileRef = useRef(null);
 
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
+  const handleFile = function (e) {
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setImageUrl(reader.result);
+    reader.onload = function () { setImageUrl(reader.result); };
     reader.readAsDataURL(file);
   };
 
@@ -1303,7 +1294,7 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
         <label className="block text-sm font-semibold text-slate-300 mb-2">Nom du produit *</label>
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={function (e) { setName(e.target.value); }}
           placeholder="Ex: Café Allongé"
           className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none mb-4"
         />
@@ -1311,7 +1302,7 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
         <label className="block text-sm font-semibold text-slate-300 mb-2">Prix de vente (€) *</label>
         <input
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
+          onChange={function (e) { setPrice(e.target.value); }}
           type="number"
           step="0.01"
           min="0"
@@ -1322,24 +1313,24 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
         <label className="block text-sm font-semibold text-slate-300 mb-2">Catégorie *</label>
         <select
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={function (e) { setCategoryId(e.target.value); }}
           className="w-full h-14 px-4 rounded-2xl bg-slate-800 text-white border border-slate-700 focus:border-indigo-500 focus:outline-none mb-4"
         >
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
+          {categories.map(function (c) {
+            return <option key={c.id} value={c.id}>{c.name}</option>;
+          })}
         </select>
 
         <label className="block text-sm font-semibold text-slate-300 mb-2">Image (optionnel)</label>
         <div className="flex gap-2 mb-2">
           <input
-            value={imageUrl.startsWith("data:") ? "" : imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
+            value={imageUrl.indexOf("data:") === 0 ? "" : imageUrl}
+            onChange={function (e) { setImageUrl(e.target.value); }}
             placeholder="URL d'image..."
             className="flex-1 h-12 px-4 rounded-2xl bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-indigo-500 focus:outline-none"
           />
           <button
-            onClick={() => fileRef.current?.click()}
+            onClick={function () { if (fileRef.current) fileRef.current.click(); }}
             className="h-12 px-4 rounded-2xl bg-slate-700 text-white font-semibold text-sm shrink-0"
           >
             Fichier
@@ -1358,9 +1349,9 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
         )}
 
         <button
-          onClick={() =>
-            onSave({ id: product.id, name: name.trim(), price, categoryId, imageUrl: imageUrl || null })
-          }
+          onClick={function () {
+            onSave({ id: product.id, name: name.trim(), price: price, categoryId: categoryId, imageUrl: imageUrl || null });
+          }}
           disabled={!name.trim() || !price}
           className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold active:scale-[0.98] transition"
         >
@@ -1373,36 +1364,32 @@ function ProductFormModal({ product, categories, onClose, onSave }) {
 
 function isSameDay(iso, date) {
   const d = new Date(iso);
-  return (
-    d.getFullYear() === date.getFullYear() &&
-    d.getMonth() === date.getMonth() &&
-    d.getDate() === date.getDate()
-  );
+  return d.getFullYear() === date.getFullYear() && d.getMonth() === date.getMonth() && d.getDate() === date.getDate();
 }
 
 function HistoryTab({ bar }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState(null);
 
-  const closedNotes = (bar.clientNotes || []).filter(
-    (n) => n.status === "paye" && n.closedAt && isSameDay(n.closedAt, selectedDate)
-  );
-  const sorted = [...closedNotes].sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
+  const closedNotes = (bar.clientNotes || []).filter(function (n) {
+    return n.status === "paye" && n.closedAt && isSameDay(n.closedAt, selectedDate);
+  });
+  const sorted = closedNotes.slice().sort(function (a, b) { return new Date(b.closedAt) - new Date(a.closedAt); });
 
-  const totalCents = closedNotes.reduce((s, n) => s + n.totalAmountCents, 0);
-  const byMethod = closedNotes.reduce((acc, n) => {
+  const totalCents = closedNotes.reduce(function (s, n) { return s + n.totalAmountCents; }, 0);
+  const byMethod = closedNotes.reduce(function (acc, n) {
     const m = n.paymentMethod || "Autre";
     acc[m] = (acc[m] || 0) + n.totalAmountCents;
     return acc;
   }, {});
 
-  const setQuickDate = (daysAgo) => {
+  const setQuickDate = function (daysAgo) {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
     setSelectedDate(d);
   };
 
-  const isQuick = (daysAgo) => {
+  const isQuick = function (daysAgo) {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
     return isSameDay(d.toISOString(), selectedDate);
@@ -1431,29 +1418,25 @@ function HistoryTab({ bar }) {
             { label: "Aujourd'hui", days: 0 },
             { label: "Hier", days: 1 },
             { label: "Avant-hier", days: 2 },
-          ].map(({ label, days }) => (
-            <button
-              key={label}
-              onClick={() => setQuickDate(days)}
-              className={`flex-1 h-11 rounded-2xl font-semibold text-sm transition ${
-                isQuick(days) ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          ].map(function (item) {
+            return (
+              <button
+                key={item.label}
+                onClick={function () { setQuickDate(item.days); }}
+                className={"flex-1 h-11 rounded-2xl font-semibold text-sm transition " + (isQuick(item.days) ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 border border-slate-800")}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
         <div className="mt-2">
           <label className="flex items-center gap-2 h-12 px-4 rounded-2xl bg-slate-900 border border-slate-800">
             <CalendarIcon className="w-4 h-4 text-slate-500 shrink-0" />
             <input
               type="date"
-              value={
-                new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000)
-                  .toISOString()
-                  .split("T")[0]
-              }
-              onChange={(e) => setSelectedDate(new Date(e.target.value + "T12:00:00"))}
+              value={new Date(selectedDate.getTime() - selectedDate.getTimezoneOffset() * 60000).toISOString().split("T")[0]}
+              onChange={function (e) { setSelectedDate(new Date(e.target.value + "T12:00:00")); }}
               className="bg-transparent text-white text-sm flex-1 focus:outline-none [color-scheme:dark]"
             />
           </label>
@@ -1470,7 +1453,8 @@ function HistoryTab({ bar }) {
           </div>
           {Object.keys(byMethod).length > 0 && (
             <div className="space-y-2 pt-3 border-t border-slate-800">
-              {Object.entries(byMethod).map(([method, cents]) => {
+              {Object.keys(byMethod).map(function (method) {
+                const cents = byMethod[method];
                 const Icon = methodIcon[method] || MoreHorizontal;
                 return (
                   <div key={method} className="flex items-center justify-between text-sm">
@@ -1494,16 +1478,16 @@ function HistoryTab({ bar }) {
           </p>
         ) : (
           <div className="space-y-2">
-            {sorted.map((note) => {
+            {sorted.map(function (note) {
               const expanded = expandedId === note.id;
               const Icon = methodIcon[note.paymentMethod] || MoreHorizontal;
               return (
                 <div key={note.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                   <button
-                    onClick={() => setExpandedId(expanded ? null : note.id)}
+                    onClick={function () { setExpandedId(expanded ? null : note.id); }}
                     className="w-full flex items-center gap-3 p-4 text-left"
                   >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${methodColor[note.paymentMethod] || methodColor["Autre"]}`}>
+                    <div className={"w-10 h-10 rounded-xl flex items-center justify-center shrink-0 " + (methodColor[note.paymentMethod] || methodColor["Autre"])}>
                       <Icon className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1517,19 +1501,21 @@ function HistoryTab({ bar }) {
                   </button>
                   {expanded && (
                     <div className="px-4 pb-4 border-t border-slate-800 pt-3">
-                      {note.orders.flatMap((o) => o.items).length === 0 ? (
+                      {note.orders.reduce(function (acc, o) { return acc.concat(o.items); }, []).length === 0 ? (
                         <p className="text-slate-600 text-sm">Aucun détail disponible.</p>
                       ) : (
                         <ul className="space-y-1">
-                          {note.orders.flatMap((o) => o.items).map((it, i) => (
-                            <li key={i} className="flex items-center justify-between text-sm">
-                              <span className="text-slate-300">
-                                {it.quantity}x {it.productName}
-                                {it.optionName && <span className="text-amber-400"> ({it.optionName})</span>}
-                              </span>
-                              <span className="text-slate-500">{money(it.priceAtPurchaseCents * it.quantity)}</span>
-                            </li>
-                          ))}
+                          {note.orders.reduce(function (acc, o) { return acc.concat(o.items); }, []).map(function (it, i) {
+                            return (
+                              <li key={i} className="flex items-center justify-between text-sm">
+                                <span className="text-slate-300">
+                                  {it.quantity}x {it.productName}
+                                  {it.optionName && <span className="text-amber-400"> ({it.optionName})</span>}
+                                </span>
+                                <span className="text-slate-500">{money(it.priceAtPurchaseCents * it.quantity)}</span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </div>
@@ -1552,35 +1538,39 @@ function BottomNav({ tab, setTab }) {
   ];
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur border-t border-slate-800 flex px-2 pb-[env(safe-area-inset-bottom)]">
-      {items.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          onClick={() => setTab(id)}
-          className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 active:scale-95 transition"
-        >
-          <div
-            className={`w-12 h-9 rounded-2xl flex items-center justify-center transition ${
-              tab === id ? "bg-indigo-600" : ""
-            }`}
+      {items.map(function (item) {
+        const Icon = item.icon;
+        const active = tab === item.id;
+        return (
+          <button
+            key={item.id}
+            onClick={function () { setTab(item.id); }}
+            className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 active:scale-95 transition"
           >
-            <Icon className={`w-5 h-5 ${tab === id ? "text-white" : "text-slate-500"}`} />
-          </div>
-          <span className={`text-xs font-semibold ${tab === id ? "text-indigo-300" : "text-slate-600"}`}>
-            {label}
-          </span>
-        </button>
-      ))}
+            <div className={"w-12 h-9 rounded-2xl flex items-center justify-center transition " + (active ? "bg-indigo-600" : "")}>
+              <Icon className={"w-5 h-5 " + (active ? "text-white" : "text-slate-500")} />
+            </div>
+            <span className={"text-xs font-semibold " + (active ? "text-indigo-300" : "text-slate-600")}>
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 function CampArdoise() {
-  const [barPassword, setBarPassword] = useState(() => localStorage.getItem(SESSION_KEY) || null);
-  const [bar, updateBar] = useBarState(barPassword);
+  const [barPassword, setBarPassword] = useState(function () {
+    return localStorage.getItem(SESSION_KEY) || null;
+  });
+  const barStateArr = useBarState(barPassword);
+  const bar = barStateArr[0];
+  const updateBar = barStateArr[1];
   const [tab, setTab] = useState("notes");
   const [view, setView] = useState({ screen: "list" });
 
-  const enterBar = (pwd) => {
+  const enterBar = function (pwd) {
     localStorage.setItem(SESSION_KEY, pwd);
     setBarPassword(pwd);
   };
@@ -1591,54 +1581,47 @@ function CampArdoise() {
 
   return (
     <div className="min-h-screen bg-slate-950 font-sans" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }
-      `}</style>
+      <style>{".no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } input[type='date']::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }"}</style>
 
-```
-  {tab === "notes" && view.screen === "list" && (
-    <ClientNotesTab
-      bar={bar}
-      updateBar={updateBar}
-      onOpenClient={(id) => setView({ screen: "detail", noteId: id })}
-    />
-  )}
-  {tab === "notes" && view.screen === "detail" && (
-    <ClientDetailScreen
-      bar={bar}
-      updateBar={updateBar}
-      noteId={view.noteId}
-      onBack={() => setView({ screen: "list" })}
-      onOrder={(id) => setView({ screen: "order", noteId: id })}
-    />
-  )}
-  {tab === "notes" && view.screen === "order" && (
-    <OrderScreen
-      bar={bar}
-      updateBar={updateBar}
-      noteId={view.noteId}
-      onBack={() => setView({ screen: "detail", noteId: view.noteId })}
-    />
-  )}
-  {tab === "admin" && <AdminTab bar={bar} updateBar={updateBar} />}
-  {tab === "history" && <HistoryTab bar={bar} />}
+      {tab === "notes" && view.screen === "list" && (
+        <ClientNotesTab
+          bar={bar}
+          updateBar={updateBar}
+          onOpenClient={function (id) { setView({ screen: "detail", noteId: id }); }}
+        />
+      )}
+      {tab === "notes" && view.screen === "detail" && (
+        <ClientDetailScreen
+          bar={bar}
+          updateBar={updateBar}
+          noteId={view.noteId}
+          onBack={function () { setView({ screen: "list" }); }}
+          onOrder={function (id) { setView({ screen: "order", noteId: id }); }}
+        />
+      )}
+      {tab === "notes" && view.screen === "order" && (
+        <OrderScreen
+          bar={bar}
+          updateBar={updateBar}
+          noteId={view.noteId}
+          onBack={function () { setView({ screen: "detail", noteId: view.noteId }); }}
+        />
+      )}
+      {tab === "admin" && <AdminTab bar={bar} updateBar={updateBar} />}
+      {tab === "history" && <HistoryTab bar={bar} />}
 
-  <BottomNav
-    tab={tab}
-    setTab={(t) => {
-      setTab(t);
-      setView({ screen: "list" });
-    }}
-  />
-</div>
-```
-
-);
+      <BottomNav
+        tab={tab}
+        setTab={function (t) {
+          setTab(t);
+          setView({ screen: "list" });
+        }}
+      />
+    </div>
+  );
 }
 
-const rootEl = document.getElementById(“root”);
+const rootEl = document.getElementById("root");
 const root = ReactDOM.createRoot(rootEl);
 root.render(<CampArdoise />);
 
