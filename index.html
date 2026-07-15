@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -8,10 +9,16 @@
 <meta name="theme-color" content="#020617" />
 
 <script src="https://cdn.tailwindcss.com"></script>
+
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
 <script src="https://unpkg.com/lucide-react@0.383.0/dist/umd/lucide-react.js" crossorigin></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,12 +28,31 @@
   html, body { background-color: #020617; margin: 0; padding: 0; }
   body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
   #root { min-height: 100vh; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  input[type='date']::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }
 </style>
+
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
+
+/* ============================================================
+   CAMP'ARDOISE — Gestionnaire de notes de bar
+   Stockage : Supabase (Postgres + Realtime), partage en direct
+   entre tous les appareils utilisant le meme mot de passe de bar.
+   ============================================================ */
+
+// ---------- CONFIGURATION SUPABASE ----------
+// Remplace ces deux valeurs par celles de TON projet Supabase.
+// Tu les trouves dans : Project Settings -> API -> Project URL / anon public key.
+const SUPABASE_URL = "https://VOTRE-PROJET.supabase.co";
+const SUPABASE_ANON_KEY = "VOTRE-CLE-ANON-PUBLIC";
+
+const supabaseReady = SUPABASE_URL.indexOf("VOTRE-PROJET") === -1 && SUPABASE_ANON_KEY.indexOf("VOTRE-CLE") === -1;
+const sb = supabaseReady ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 const {
@@ -35,6 +61,7 @@ const {
   Pencil, ChevronRight, Calendar: CalendarIcon, Settings,
   ListChecks, Users, History, Coffee, Beer, Wine, GlassWater,
   IceCream, Utensils, Sparkles, Martini, CupSoda, Baby, AlertTriangle,
+  WifiOff, Wifi,
 } = LucideReact;
 
 const toCents = (euros) => Math.round(euros * 100);
@@ -142,10 +169,11 @@ const SEED = {
   clientNotes: [],
 };
 
+// ---------- Couche de persistance : localStorage (fallback hors-ligne) ----------
 const STORAGE_PREFIX = "campardoise::bar::";
 const SESSION_KEY = "campardoise::session";
 
-function loadBarState(barPassword) {
+function loadLocalBarState(barPassword) {
   const raw = localStorage.getItem(STORAGE_PREFIX + barPassword);
   if (!raw) return null;
   try {
@@ -154,34 +182,103 @@ function loadBarState(barPassword) {
     return null;
   }
 }
-function saveBarState(barPassword, state) {
+function saveLocalBarState(barPassword, state) {
   localStorage.setItem(STORAGE_PREFIX + barPassword, JSON.stringify(state));
 }
-function barExists(barPassword) {
+function localBarExists(barPassword) {
   return localStorage.getItem(STORAGE_PREFIX + barPassword) !== null;
 }
 
+// ---------- Couche de persistance : Supabase ----------
+// Une seule table "bars" : colonne "password" (clé), colonne "data" (jsonb).
+async function fetchRemoteBar(barPassword) {
+  const { data, error } = await sb
+    .from("bars")
+    .select("data")
+    .eq("password", barPassword)
+    .maybeSingle();
+  if (error) {
+    console.error("Supabase fetch error:", error);
+    return { found: false, error };
+  }
+  if (!data) return { found: false };
+  return { found: true, state: data.data };
+}
+
+async function createRemoteBar(barPassword, state) {
+  const { error } = await sb.from("bars").insert({ password: barPassword, data: state });
+  return { error };
+}
+
+async function saveRemoteBar(barPassword, state) {
+  const { error } = await sb.from("bars").update({ data: state }).eq("password", barPassword);
+  return { error };
+}
+
+// ---------- Hook d'etat du bar : bascule auto Supabase / localStorage ----------
 function useBarState(barPassword) {
-  const [state, setState] = useState(function () {
-    return barPassword ? loadBarState(barPassword) : null;
-  });
+  const [state, setState] = useState(null);
+  const [online, setOnline] = useState(supabaseReady);
+  const [loading, setLoading] = useState(true);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const channelRef = useRef(null);
 
   useEffect(function () {
     if (!barPassword) return;
-    const fresh = loadBarState(barPassword);
-    setState(fresh);
+    let cancelled = false;
+    setLoading(true);
+
+    async function init() {
+      if (supabaseReady) {
+        const result = await fetchRemoteBar(barPassword);
+        if (cancelled) return;
+        if (result.found) {
+          setOnline(true);
+          setState(result.state);
+        } else if (!result.error) {
+          setOnline(true);
+          setState(null);
+        } else {
+          setOnline(false);
+          setState(loadLocalBarState(barPassword));
+        }
+      } else {
+        setOnline(false);
+        setState(loadLocalBarState(barPassword));
+      }
+      setLoading(false);
+    }
+    init();
+
+    return function () { cancelled = true; };
+  }, [barPassword]);
+
+  useEffect(function () {
+    if (!barPassword || !supabaseReady) return;
+    const channel = sb
+      .channel("bar-" + barPassword)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bars", filter: "password=eq." + barPassword },
+        function (payload) {
+          setState(payload.new.data);
+        }
+      )
+      .subscribe();
+    channelRef.current = channel;
+    return function () {
+      sb.removeChannel(channel);
+    };
   }, [barPassword]);
 
   useEffect(function () {
     if (!barPassword) return;
+    if (supabaseReady) return;
     const key = STORAGE_PREFIX + barPassword;
     const onStorage = function (e) {
       if (e.key === key && e.newValue) {
-        try {
-          setState(JSON.parse(e.newValue));
-        } catch (err) {}
+        try { setState(JSON.parse(e.newValue)); } catch (err) {}
       }
     };
     window.addEventListener("storage", onStorage);
@@ -189,9 +286,7 @@ function useBarState(barPassword) {
       const raw = localStorage.getItem(key);
       if (!raw) return;
       if (raw !== JSON.stringify(stateRef.current)) {
-        try {
-          setState(JSON.parse(raw));
-        } catch (err) {}
+        try { setState(JSON.parse(raw)); } catch (err) {}
       }
     }, 700);
     return function () {
@@ -204,35 +299,68 @@ function useBarState(barPassword) {
     function (updater) {
       setState(function (prev) {
         const next = typeof updater === "function" ? updater(prev) : updater;
-        if (barPassword) saveBarState(barPassword, next);
+        if (barPassword) {
+          if (online && supabaseReady) {
+            saveRemoteBar(barPassword, next).then(function (res) {
+              if (res.error) console.error("Supabase save error:", res.error);
+            });
+          } else {
+            saveLocalBarState(barPassword, next);
+          }
+        }
         return next;
       });
     },
-    [barPassword]
+    [barPassword, online]
   );
 
-  return [state, update];
+  return [state, update, { online, loading }];
+}
+
+async function barExistsAnywhere(barPassword) {
+  if (supabaseReady) {
+    const result = await fetchRemoteBar(barPassword);
+    if (!result.error) return result.found;
+  }
+  return localBarExists(barPassword);
 }
 
 function AuthScreen({ onEnter }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleCreate = function () {
+  const handleCreate = async function () {
     const pwd = password.trim();
     if (!pwd) return setError("Merci de saisir un mot de passe pour créer l'espace.");
-    if (barExists(pwd)) {
+    setBusy(true);
+    const exists = await barExistsAnywhere(pwd);
+    if (exists) {
+      setBusy(false);
       setError("Un espace existe déjà avec ce mot de passe. Utilisez « Rejoindre un Bar existant ».");
       return;
     }
-    saveBarState(pwd, SEED);
+    if (supabaseReady) {
+      const { error: createErr } = await createRemoteBar(pwd, SEED);
+      if (createErr) {
+        setBusy(false);
+        setError("Impossible de créer l'espace en ligne (" + createErr.message + "). Vérifiez la configuration Supabase.");
+        return;
+      }
+    } else {
+      saveLocalBarState(pwd, SEED);
+    }
+    setBusy(false);
     onEnter(pwd);
   };
 
-  const handleJoin = function () {
+  const handleJoin = async function () {
     const pwd = password.trim();
     if (!pwd) return setError("Merci de saisir le mot de passe du bar à rejoindre.");
-    if (!barExists(pwd)) {
+    setBusy(true);
+    const exists = await barExistsAnywhere(pwd);
+    setBusy(false);
+    if (!exists) {
       setError("Aucun espace ne correspond à ce mot de passe. Créez-le d'abord.");
       return;
     }
@@ -248,6 +376,10 @@ function AuthScreen({ onEnter }) {
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Camp'Ardoise</h1>
           <p className="text-slate-400 mt-1 text-sm">Le carnet de notes du bar, sans papier.</p>
+          <div className={"inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-3 py-1 rounded-full " + (supabaseReady ? "bg-emerald-950/60 text-emerald-400" : "bg-amber-950/60 text-amber-400")}>
+            {supabaseReady ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+            {supabaseReady ? "Synchronisation en direct activée" : "Mode local uniquement (non synchronisé)"}
+          </div>
         </div>
 
         <div className="bg-slate-900 rounded-3xl p-6 shadow-xl border border-slate-800">
@@ -275,21 +407,24 @@ function AuthScreen({ onEnter }) {
           <div className="mt-6 space-y-3">
             <button
               onClick={handleCreate}
-              className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] transition text-white font-bold text-base shadow-lg shadow-indigo-950/40"
+              disabled={busy}
+              className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] transition text-white font-bold text-base shadow-lg shadow-indigo-950/40 disabled:opacity-50"
             >
-              Créer un espace Bar
+              {busy ? "Patientez..." : "Créer un espace Bar"}
             </button>
             <button
               onClick={handleJoin}
-              className="w-full h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] transition text-white font-bold text-base border border-slate-700"
+              disabled={busy}
+              className="w-full h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] transition text-white font-bold text-base border border-slate-700 disabled:opacity-50"
             >
-              Rejoindre un Bar existant
+              {busy ? "Patientez..." : "Rejoindre un Bar existant"}
             </button>
           </div>
         </div>
         <p className="text-center text-slate-600 text-xs mt-6">
-          Tous les appareils utilisant le même mot de passe partagent en direct
-          les mêmes catégories, produits et ardoises clients.
+          {supabaseReady
+            ? "Tous les appareils utilisant le même mot de passe partagent en direct les mêmes catégories, produits et ardoises clients."
+            : "Configurez SUPABASE_URL et SUPABASE_ANON_KEY dans le fichier pour activer le partage entre appareils."}
         </p>
       </div>
     </div>
@@ -1567,6 +1702,7 @@ function CampArdoise() {
   const barStateArr = useBarState(barPassword);
   const bar = barStateArr[0];
   const updateBar = barStateArr[1];
+  const meta = barStateArr[2];
   const [tab, setTab] = useState("notes");
   const [view, setView] = useState({ screen: "list" });
 
@@ -1575,13 +1711,35 @@ function CampArdoise() {
     setBarPassword(pwd);
   };
 
-  if (!barPassword || !bar) {
+  const exitBar = function () {
+    localStorage.removeItem(SESSION_KEY);
+    setBarPassword(null);
+  };
+
+  if (!barPassword) {
+    return <AuthScreen onEnter={enterBar} />;
+  }
+
+  if (meta.loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <p className="text-slate-500 font-medium">Chargement de l'espace bar...</p>
+      </div>
+    );
+  }
+
+  if (!bar) {
     return <AuthScreen onEnter={enterBar} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-950 font-sans" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <style>{".no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } input[type='date']::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }"}</style>
+      {!meta.online && (
+        <div className="bg-amber-950/80 text-amber-300 text-xs font-semibold text-center py-1.5 px-4 flex items-center justify-center gap-1.5">
+          <WifiOff className="w-3.5 h-3.5" />
+          Mode local — données non synchronisées entre appareils
+        </div>
+      )}
 
       {tab === "notes" && view.screen === "list" && (
         <ClientNotesTab
@@ -1626,5 +1784,6 @@ const root = ReactDOM.createRoot(rootEl);
 root.render(<CampArdoise />);
 
 </script>
+
 </body>
 </html>
